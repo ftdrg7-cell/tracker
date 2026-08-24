@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>@ft.drg Tracker</title>
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#090d16">
+
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #121824;
+      --card-inner: #1a2232;
+      --primary: #4f8cff;
+      --accent: #23c55e;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border: #232d3f;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding-bottom: 90px; }
+    
+    header {
+      background: rgba(18, 24, 36, 0.95);
+      backdrop-filter: blur(10px);
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .brand-section { display: flex; flex-direction: column; gap: 2px; }
+    .brand-title { font-size: 0.95rem; font-weight: 800; color: var(--primary); letter-spacing: 0.5px; }
+    .social-links { display: flex; align-items: center; gap: 8px; }
+    .social-tag { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); }
+    .social-icon { width: 14px; height: 14px; fill: var(--text-muted); vertical-align: middle; }
+    
+    .header-actions { display: flex; gap: 6px; }
+
+    .container { padding: 12px; max-width: 550px; margin: 0 auto; }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .card h2 { font-size: 0.9rem; font-weight: 700; text-transform: uppercase; color: var(--text); }
+    
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center; }
+    .stat-box { background: var(--card-inner); border: 1px solid var(--border); border-radius: 10px; padding: 8px 4px; }
+    .stat-val { font-size: 0.95rem; font-weight: 800; color: var(--primary); }
+    .stat-lbl { font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; margin-top: 3px; font-weight: 600; }
+    
+    .progress-bar { background: var(--card-inner); border-radius: 8px; height: 7px; overflow: hidden; width: 100%; margin-top: 8px; }
+    .progress-fill { background: var(--accent); height: 100%; width: 0%; transition: width 0.3s ease; }
+    
+    input, select, button {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      outline: none;
+      width: 100%;
+    }
+    input:focus, select:focus { border-color: var(--primary); }
+    button { background: #2563eb; border: none; font-weight: 700; cursor: pointer; }
+    button:active { opacity: 0.75; }
+    
+    .btn-row { display: flex; gap: 8px; margin-top: 8px; }
+    .btn-secondary { background: var(--card-inner); border: 1px solid var(--border); }
+    .btn-danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); padding: 5px 10px; font-size: 0.75rem; border-radius: 8px; width: auto; }
+    .btn-small { padding: 5px 10px; font-size: 0.75rem; border-radius: 8px; width: auto; }
+    
+    .log-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
+    .log-item { background: var(--card-inner); padding: 8px 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; border-left: 3px solid var(--primary); }
+    .log-del { color: var(--danger); cursor: pointer; margin-left: 10px; font-weight: bold; font-size: 1rem; }
+    
+    .set-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0; }
+
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 200; align-items: center; justify-content: center; padding: 16px; }
+    .modal-content { background: var(--card-bg); border: 1px solid var(--border); border-radius: 14px; padding: 16px; width: 100%; max-width: 400px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand-section">
+      <div class="brand-title">MINI-CUT DASHBOARD</div>
+      <div class="social-links">
+        <span class="social-tag">@ft.drg</span>
+        <svg class="social-icon" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+        <svg class="social-icon" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn-secondary btn-small" onclick="openTargetModal()">⚙️ Targets</button>
+      <button class="btn-danger" onclick="resetAllData()">Reset</button>
+    </div>
+  </header>
+
+  <div class="container">
+
+    <!-- 20-DAY COUNTDOWN TRACKER -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Photo Shoot Countdown</h2>
+        <span id="countdown-status" style="font-weight: 700; color: var(--primary); font-size: 0.85rem;">Day 1 of 20</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="countdown-bar" style="background: linear-gradient(90deg, #4f8cff, #23c55e);"></div></div>
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="changeCutDay(1)">+ Next Day</button>
+        <button class="btn-secondary" onclick="changeCutDay(-1)">- Prev Day</button>
+        <button class="btn-secondary" onclick="resetCutDays()">Reset 20D</button>
+      </div>
+    </div>
+    
+    <!-- NUTRITION OVERVIEW -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Daily Nutrition</h2>
+        <span id="cal-left" style="color: var(--accent); font-weight: 700; font-size: 0.85rem;">1750 kcal left</span>
+      </div>
+      <div class="grid-4">
+        <div class="stat-box">
+          <div class="stat-val" id="disp-cal">0</div>
+          <div class="stat-lbl" id="target-lbl-cal">/ 1750 kcal</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="disp-pro">0g</div>
+          <div class="stat-lbl" id="target-lbl-pro">/ 90g Prot</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="disp-carb">0g</div>
+          <div class="stat-lbl" id="target-lbl-carb">/ 220g Carb</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="disp-fat">0g</div>
+          <div class="stat-lbl" id="target-lbl-fat">/ 45g Fat</div>
+        </div>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="cal-bar"></div></div>
+    </div>
+
+    <!-- FOOD & MEAL LOGGER -->
+    <div class="card">
+      <h2>Log Food / Meal</h2>
+      <div style="display: flex; gap: 8px; margin-top: 8px;">
+        <select id="food-select" onchange="handleFoodSelectChange()" style="flex: 2;">
+          <option value="milk">Toned Milk (ml)</option>
+          <option value="soya">Soya Chunks Raw (g)</option>
+          <option value="chana">Chana Sprouts (g)</option>
+          <option value="moong">Moong Sprouts (g)</option>
+          <option value="roti">Roti (pcs)</option>
+          <option value="rice">Cooked Rice (g)</option>
+          <option value="banana">Banana (pcs)</option>
+          <option value="custom">-- Custom Entry --</option>
+        </select>
+        <input type="number" id="portion-input" placeholder="Qty (e.g. 1000)" style="flex: 1;">
+      </div>
+
+      <div id="custom-inputs" style="display: none; margin-top: 8px;">
+        <input type="text" id="cust-name" placeholder="Item Name (e.g. Oats)" style="margin-bottom: 6px;">
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+          <input type="number" id="cust-cal" placeholder="kcal">
+          <input type="number" id="cust-pro" placeholder="P (g)">
+          <input type="number" id="cust-carb" placeholder="C (g)">
+          <input type="number" id="cust-fat" placeholder="F (g)">
+        </div>
+      </div>
+
+      <button style="margin-top: 8px; background: var(--accent);" onclick="addFoodPortion()">Add To Diet</button>
+      <div class="log-list" id="food-log"></div>
+    </div>
+
+    <!-- WATER TRACKER -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Water Intake (4.0 L Target)</h2>
+        <span id="water-val" style="color: var(--primary); font-weight: 700;">0.00 L</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="water-bar" style="background: var(--primary);"></div></div>
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="addWater(0.25)">+ 250 ml</button>
+        <button class="btn-secondary" onclick="addWater(0.5)">+ 500 ml</button>
+        <button class="btn-secondary" onclick="resetWater()">Reset</button>
+      </div>
+    </div>
+
+    <!-- STEP COUNTER -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Daily Steps (10,000 Target)</h2>
+      </div>
+      <div class="grid-4" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="stat-box">
+          <div class="stat-val" id="disp-steps">0</div>
+          <div class="stat-lbl">Steps</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="disp-km">0.0 km</div>
+          <div class="stat-lbl">Distance</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="disp-step-cal">0 kcal</div>
+          <div class="stat-lbl">Burned</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 8px;">
+        <input type="number" id="step-input" placeholder="Add Steps (e.g. 2000)">
+        <button onclick="logSteps()" style="width: 120px;">Add</button>
+      </div>
+    </div>
+
+    <!-- WORKOUT LOGGER -->
+    <div class="card">
+      <h2>Workout & Lift Logger</h2>
+      <input type="text" id="ex-name" placeholder="Exercise (e.g. Incline Dumbbell Press)" style="margin-top: 8px;">
+      
+      <div class="set-grid">
+        <input type="number" id="s1-w" placeholder="Set 1 (kg)">
+        <input type="number" id="s1-r" placeholder="Set 1 (Reps)">
+        <input type="number" id="s2-w" placeholder="Set 2 (kg)">
+        <input type="number" id="s2-r" placeholder="Set 2 (Reps)">
+        <input type="number" id="s3-w" placeholder="Set 3 (kg)">
+        <input type="number" id="s3-r" placeholder="Set 3 (Reps)">
+      </div>
+      
+      <button onclick="logWorkout()">Log Sets & Vol</button>
+      <div class="log-list" id="workout-log"></div>
+    </div>
+
+  </div>
+
+  <!-- TARGETS CONFIG MODAL -->
+  <div class="modal" id="target-modal">
+    <div class="modal-content">
+      <h2 style="margin-bottom: 12px; font-size: 1rem;">Edit Targets</h2>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <label style="font-size: 0.75rem; color: var(--text-muted);">Daily Calories</label>
+        <input type="number" id="cfg-cal">
+        <label style="font-size: 0.75rem; color: var(--text-muted);">Protein (g)</label>
+        <input type="number" id="cfg-pro">
+        <label style="font-size: 0.75rem; color: var(--text-muted);">Carbs (g)</label>
+        <input type="number" id="cfg-carb">
+        <label style="font-size: 0.75rem; color: var(--text-muted);">Fats (g)</label>
+        <input type="number" id="cfg-fat">
+      </div>
+      <div class="btn-row" style="margin-top: 14px;">
+        <button onclick="saveTargets()">Save</button>
+        <button class="btn-secondary" onclick="closeTargetModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const FOOD_DB = {
+      milk: { name: "Toned Milk", unit: "ml", factor: 0.01, cal: 58, pro: 3.2, carb: 4.8, fat: 3.0 },
+      soya: { name: "Soya Chunks", unit: "g", factor: 0.01, cal: 350, pro: 52, carb: 33, fat: 0.5 },
+      chana: { name: "Chana Sprouts", unit: "g", factor: 0.01, cal: 360, pro: 20, carb: 60, fat: 5.0 },
+      moong: { name: "Moong Sprouts", unit: "g", factor: 0.01, cal: 350, pro: 24, carb: 60, fat: 1.2 },
+      roti: { name: "Roti", unit: "pcs", factor: 1, cal: 85, pro: 3.0, carb: 17, fat: 0.5 },
+      rice: { name: "Cooked Rice", unit: "g", factor: 0.01, cal: 130, pro: 2.7, carb: 28, fat: 0.3 },
+      banana: { name: "Banana", unit: "pcs", factor: 1, cal: 105, pro: 1.3, carb: 27, fat: 0.3 }
+    };
+
+    let defaultState = {
+      targets: { cal: 1750, pro: 90, carb: 220, fat: 45, water: 4.0, steps: 10000, days: 20, currentDay: 1 },
+      current: { cal: 0, pro: 0, carb: 0, fat: 0, water: 0.0, steps: 0 },
+      foodLogs: [],
+      workoutLogs: []
+    };
+
+    let appData = JSON.parse(localStorage.getItem('ftdrgCutData_v2')) || defaultState;
+    if (!appData.targets) appData.targets = defaultState.targets;
+
+    function save() {
+      localStorage.setItem('ftdrgCutData_v2', JSON.stringify(appData));
+    }
+
+    function initUI() {
+      updateNutritionUI();
+      updateWaterUI();
+      updateStepsUI();
+      updateCountdownUI();
+      renderLogs();
+      handleFoodSelectChange();
+    }
+
+    function updateCountdownUI() {
+      document.getElementById('countdown-status').innerText = `Day ${appData.targets.currentDay || 1} of 20`;
+      const pct = Math.min(100, ((appData.targets.currentDay || 1) / 20) * 100);
+      document.getElementById('countdown-bar').style.width = pct + '%';
+    }
+
+    function changeCutDay(val) {
+      appData.targets.currentDay = Math.max(1, Math.min(20, (appData.targets.currentDay || 1) + val));
+      save();
+      updateCountdownUI();
+    }
+
+    function resetCutDays() {
+      appData.targets.currentDay = 1;
+      save();
+      updateCountdownUI();
+    }
+
+    function handleFoodSelectChange() {
+      const type = document.getElementById('food-select').value;
+      const isCustom = type === 'custom';
+      document.getElementById('custom-inputs').style.display = isCustom ? 'block' : 'none';
+      document.getElementById('portion-input').style.display = isCustom ? 'none' : 'block';
+      if (!isCustom) {
+        document.getElementById('portion-input').placeholder = `Qty in ${FOOD_DB[type].unit}`;
+      }
+    }
+
+    function addFoodPortion() {
+      const type = document.getElementById('food-select').value;
+      let logEntry = {};
+
+      if (type === 'custom') {
+        const name = document.getElementById('cust-name').value || 'Custom Food';
+        const cal = parseFloat(document.getElementById('cust-cal').value) || 0;
+        const pro = parseFloat(document.getElementById('cust-pro').value) || 0;
+        const carb = parseFloat(document.getElementById('cust-carb').value) || 0;
+        const fat = parseFloat(document.getElementById('cust-fat').value) || 0;
+        if (cal <= 0) return alert("Enter calorie amount");
+        logEntry = { id: Date.now(), name, cal, pro, carb, fat };
+      } else {
+        const portion = parseFloat(document.getElementById('portion-input').value) || 0;
+        if (portion <= 0) return alert("Enter valid quantity!");
+        const item = FOOD_DB[type];
+        const mult = portion * item.factor;
+        logEntry = {
+          id: Date.now(),
+          name: `${portion} ${item.unit} ${item.name}`,
+          cal: Math.round(item.cal * mult),
+          pro: Math.round(item.pro * mult * 10) / 10,
+          carb: Math.round(item.carb * mult * 10) / 10,
+          fat: Math.round(item.fat * mult * 10) / 10
+        };
+      }
+
+      appData.current.cal += logEntry.cal;
+      appData.current.pro += logEntry.pro;
+      appData.current.carb += logEntry.carb;
+      appData.current.fat += logEntry.fat;
+      appData.foodLogs.unshift(logEntry);
+
+      save();
+      initUI();
+      document.getElementById('portion-input').value = '';
+    }
+
+    function deleteFood(id) {
+      const idx = appData.foodLogs.findIndex(x => x.id === id);
+      if (idx !== -1) {
+        const item = appData.foodLogs[idx];
+        appData.current.cal = Math.max(0, appData.current.cal - item.cal);
+        appData.current.pro = Math.max(0, appData.current.pro - item.pro);
+        appData.current.carb = Math.max(0, appData.current.carb - item.carb);
+        appData.current.fat = Math.max(0, appData.current.fat - item.fat);
+        appData.foodLogs.splice(idx, 1);
+        save();
+        initUI();
+      }
+    }
+
+    function updateNutritionUI() {
+      const T = appData.targets;
+      document.getElementById('disp-cal').innerText = Math.round(appData.current.cal);
+      document.getElementById('target-lbl-cal').innerText = `/ ${T.cal} kcal`;
+      document.getElementById('disp-pro').innerText = `${Math.round(appData.current.pro)}g`;
+      document.getElementById('target-lbl-pro').innerText = `/ ${T.pro}g Prot`;
+      document.getElementById('disp-carb').innerText = `${Math.round(appData.current.carb)}g`;
+      document.getElementById('target-lbl-carb').innerText = `/ ${T.carb}g Carb`;
+      document.getElementById('disp-fat').innerText = `${Math.round(appData.current.fat)}g`;
+      document.getElementById('target-lbl-fat').innerText = `/ ${T.fat}g Fat`;
+
+      const remaining = Math.max(0, T.cal - appData.current.cal);
+      document.getElementById('cal-left').innerText = `${Math.round(remaining)} kcal left`;
+      
+      const pct = Math.min(100, (appData.current.cal / T.cal) * 100);
+      document.getElementById('cal-bar').style.width = pct + '%';
+    }
+
+    function addWater(amount) {
+      appData.current.water = Math.min(6, appData.current.water + amount);
+      save();
+      updateWaterUI();
+    }
+
+    function resetWater() {
+      appData.current.water = 0;
+      save();
+      updateWaterUI();
+    }
+
+    function updateWaterUI() {
+      document.getElementById('water-val').innerText = `${appData.current.water.toFixed(2)} L`;
+      document.getElementById('water-bar').style.width = Math.min(100, (appData.current.water / appData.targets.water) * 100) + '%';
+    }
+
+    function logSteps() {
+      const steps = parseInt(document.getElementById('step-input').value) || 0;
+      if (steps > 0) {
+        appData.current.steps += steps;
+        document.getElementById('step-input').value = '';
+        save();
+        updateStepsUI();
+      }
+    }
+
+    function updateStepsUI() {
+      const km = (appData.current.steps * 0.75) / 1000;
+      const burned = appData.current.steps * 0.04;
+      document.getElementById('disp-steps').innerText = appData.current.steps;
+      document.getElementById('disp-km').innerText = km.toFixed(2) + ' km';
+      document.getElementById('disp-step-cal').innerText = Math.round(burned) + ' kcal';
+    }
+
+    function logWorkout() {
+      const name = document.getElementById('ex-name').value || 'Heavy Lift';
+      const s1w = parseFloat(document.getElementById('s1-w').value) || 0;
+      const s1r = parseFloat(document.getElementById('s1-r').value) || 0;
+      const s2w = parseFloat(document.getElementById('s2-w').value) || 0;
+      const s2r = parseFloat(document.getElementById('s2-r').value) || 0;
+      const s3w = parseFloat(document.getElementById('s3-w').value) || 0;
+      const s3r = parseFloat(document.getElementById('s3-r').value) || 0;
+
+      const totalVol = (s1w * s1r) + (s2w * s2r) + (s3w * s3r);
+      const estBurn = Math.round((totalVol * 0.02) + 25);
+
+      appData.workoutLogs.unshift({ id: Date.now(), name, totalVol, estBurn });
+      save();
+      renderLogs();
+
+      document.getElementById('ex-name').value = '';
+      document.getElementById('s1-w').value = ''; document.getElementById('s1-r').value = '';
+      document.getElementById('s2-w').value = ''; document.getElementById('s2-r').value = '';
+      document.getElementById('s3-w').value = ''; document.getElementById('s3-r').value = '';
+    }
+
+    function deleteWorkout(id) {
+      appData.workoutLogs = appData.workoutLogs.filter(x => x.id !== id);
+      save();
+      renderLogs();
+    }
+
+    function renderLogs() {
+      document.getElementById('food-log').innerHTML = appData.foodLogs.map(item => 
+        `<div class="log-item">
+          <span>${item.name} (${item.cal} kcal | ${item.pro}g P)</span>
+          <span class="log-del" onclick="deleteFood(${item.id})">✕</span>
+        </div>`
+      ).join('');
+
+      document.getElementById('workout-log').innerHTML = appData.workoutLogs.map(item => 
+        `<div class="log-item">
+          <span><b>${item.name}</b> (Vol: ${item.totalVol}kg) | ~${item.estBurn} kcal</span>
+          <span class="log-del" onclick="deleteWorkout(${item.id})">✕</span>
+        </div>`
+      ).join('');
+    }
+
+    function openTargetModal() {
+      document.getElementById('cfg-cal').value = appData.targets.cal;
+      document.getElementById('cfg-pro').value = appData.targets.pro;
+      document.getElementById('cfg-carb').value = appData.targets.carb;
+      document.getElementById('cfg-fat').value = appData.targets.fat;
+      document.getElementById('target-modal').style.display = 'flex';
+    }
+
+    function closeTargetModal() {
+      document.getElementById('target-modal').style.display = 'none';
+    }
+
+    function saveTargets() {
+      appData.targets.cal = parseInt(document.getElementById('cfg-cal').value) || 1750;
+      appData.targets.pro = parseInt(document.getElementById('cfg-pro').value) || 90;
+      appData.targets.carb = parseInt(document.getElementById('cfg-carb').value) || 220;
+      appData.targets.fat = parseInt(document.getElementById('cfg-fat').value) || 45;
+      save();
+      closeTargetModal();
+      initUI();
+    }
+
+    function resetAllData() {
+      if (confirm("Reset today's logged food, water, steps, and workouts?")) {
+        appData.current = { cal: 0, pro: 0, carb: 0, fat: 0, water: 0.0, steps: 0 };
+        appData.foodLogs = [];
+        appData.workoutLogs = [];
+        save();
+        initUI();
+      }
+    }
+
+    window.onload = initUI;
+  </script>
+</body>
+</html>
