@@ -2,18 +2,19 @@
   "name": "ftdrg Tracker",
   "short_name": "ftdrg",
   "start_url": "/tracker/",
+  "scope": "/tracker/",
   "display": "standalone",
   "background_color": "#090d16",
   "theme_color": "#090d16",
   "icons": [
     {
-      "src": "https://raw.githubusercontent.com/ftdrg7-cell/tracker/main/icon.png",
+      "src": "icon.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "https://raw.githubusercontent.com/ftdrg7-cell/tracker/main/icon.png",
+      "src": "icon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
