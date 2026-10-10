@@ -29,6 +29,7 @@
       --border: #232d3f;
       --danger: #ef4444;
       --excel-header: #107c41;
+      --warning: #f59e0b;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: var(--bg); color: var(--text); padding-bottom: 90px; overflow-x: hidden; }
@@ -56,6 +57,19 @@
     }
     .brand-title { font-size: 0.95rem; font-weight: 800; color: var(--primary); }
     .header-actions { display: flex; gap: 6px; }
+
+    /* Past Date Active Banner */
+    #active-date-banner {
+      display: none;
+      background: rgba(245, 158, 11, 0.15);
+      border-bottom: 1px solid var(--warning);
+      color: var(--warning);
+      padding: 8px 16px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-align: center;
+      cursor: pointer;
+    }
 
     /* Navigation Bar */
     .tab-bar {
@@ -163,6 +177,11 @@
     </div>
   </header>
 
+  <!-- Sticky Banner for Editing Past Date -->
+  <div id="active-date-banner" onclick="switchToDate(null)">
+    ⚠️ Editing Past Date: <span id="banner-date-text"></span> (Tap here to return to Today)
+  </div>
+
   <!-- 3 Navigable Tabs -->
   <div class="tab-bar">
     <button class="tab-btn active" onclick="switchTab('diet', this)">🥗 Diet</button>
@@ -176,7 +195,7 @@
     <div id="tab-diet" class="page-section active">
       <div class="card">
         <div class="card-header">
-          <h2>Daily Nutrition</h2>
+          <h2 id="nutrition-card-title">Daily Nutrition</h2>
           <span id="cal-left" style="color: var(--accent); font-weight: 700; font-size: 0.85rem;">1750 kcal left</span>
         </div>
         <div class="grid-4">
@@ -202,7 +221,7 @@
 
       <div class="card">
         <div class="card-header">
-          <h2>Log Food Portion</h2>
+          <h2 id="log-portion-title">Log Food Portion</h2>
           <div style="display:flex; gap:6px;">
             <button class="btn-secondary btn-small" onclick="openFoodManagerModal()">Manage DB</button>
             <button class="btn-secondary btn-small" onclick="openAddFoodModal()">+ Create Food</button>
@@ -346,9 +365,10 @@
   <div class="modal" id="calendar-modal">
     <div class="modal-content">
       <div class="card-header">
-        <h2>Logged History</h2>
+        <h2>Select / Edit History Day</h2>
         <span onclick="closeModal('calendar-modal')" style="cursor: pointer; font-size: 1.2rem;">✕</span>
       </div>
+      <div style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 10px;">Tap any date card to view & edit its diet & macros.</div>
       <div class="log-list" id="history-list" style="max-height: 350px;"></div>
     </div>
   </div>
@@ -415,10 +435,12 @@
 
     let appData = JSON.parse(localStorage.getItem('ftdrgCutData_v2')) || defaultState;
 
-    // Merge default foods if not present
     if (!appData.foodsDb || appData.foodsDb.length < 5) {
       appData.foodsDb = DEFAULT_FOODS;
     }
+
+    // null means viewing & editing TODAY (active day). Number means index in appData.history
+    let viewingHistoryIndex = null;
 
     function save() {
       localStorage.setItem('ftdrgCutData_v2', JSON.stringify(appData));
@@ -434,7 +456,7 @@
           carb: Math.round(appData.current.carb),
           fat: Math.round(appData.current.fat),
           steps: appData.current.steps,
-          water: appData.current.water.toFixed(2),
+          water: Number(appData.current.water).toFixed(2),
           logs: [...appData.foodLogs]
         });
 
@@ -460,6 +482,25 @@
       updateStepsUI();
       renderExerciseTable();
       renderFoodLogs();
+      updateBannerUI();
+    }
+
+    function updateBannerUI() {
+      const banner = document.getElementById('active-date-banner');
+      const titleEl = document.getElementById('nutrition-card-title');
+      const portionTitle = document.getElementById('log-portion-title');
+
+      if (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex]) {
+        const histDay = appData.history[viewingHistoryIndex];
+        banner.style.display = 'block';
+        document.getElementById('banner-date-text').innerText = histDay.date;
+        titleEl.innerText = `Nutrition • ${histDay.date}`;
+        portionTitle.innerText = `Log Food to ${histDay.date}`;
+      } else {
+        banner.style.display = 'none';
+        titleEl.innerText = 'Daily Nutrition';
+        portionTitle.innerText = 'Log Food Portion';
+      }
     }
 
     function populateFoodDropdown() {
@@ -485,11 +526,23 @@
         fat: Math.round(item.fat * ratio * 10) / 10
       };
 
-      appData.current.cal += log.cal;
-      appData.current.pro += log.pro;
-      appData.current.carb += log.carb;
-      appData.current.fat += log.fat;
-      appData.foodLogs.unshift(log);
+      if (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex]) {
+        // Adding into past date history
+        const day = appData.history[viewingHistoryIndex];
+        if (!day.logs) day.logs = [];
+        day.logs.unshift(log);
+        day.cal = (day.cal || 0) + log.cal;
+        day.pro = Math.round(((day.pro || 0) + log.pro) * 10) / 10;
+        day.carb = Math.round(((day.carb || 0) + log.carb) * 10) / 10;
+        day.fat = Math.round(((day.fat || 0) + log.fat) * 10) / 10;
+      } else {
+        // Adding into current today
+        appData.current.cal += log.cal;
+        appData.current.pro += log.pro;
+        appData.current.carb += log.carb;
+        appData.current.fat += log.fat;
+        appData.foodLogs.unshift(log);
+      }
 
       save();
       initUI();
@@ -497,33 +550,56 @@
     }
 
     function deleteFood(id) {
-      const idx = appData.foodLogs.findIndex(x => x.id === id);
-      if (idx !== -1) {
-        const item = appData.foodLogs[idx];
-        appData.current.cal = Math.max(0, appData.current.cal - item.cal);
-        appData.current.pro = Math.max(0, appData.current.pro - item.pro);
-        appData.current.carb = Math.max(0, appData.current.carb - item.carb);
-        appData.current.fat = Math.max(0, appData.current.fat - item.fat);
-        appData.foodLogs.splice(idx, 1);
-        save();
-        initUI();
+      if (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex]) {
+        const day = appData.history[viewingHistoryIndex];
+        const idx = (day.logs || []).findIndex(x => x.id === id);
+        if (idx !== -1) {
+          const item = day.logs[idx];
+          day.cal = Math.max(0, (day.cal || 0) - item.cal);
+          day.pro = Math.max(0, Math.round(((day.pro || 0) - item.pro) * 10) / 10);
+          day.carb = Math.max(0, Math.round(((day.carb || 0) - item.carb) * 10) / 10);
+          day.fat = Math.max(0, Math.round(((day.fat || 0) - item.fat) * 10) / 10);
+          day.logs.splice(idx, 1);
+          save();
+          initUI();
+        }
+      } else {
+        const idx = appData.foodLogs.findIndex(x => x.id === id);
+        if (idx !== -1) {
+          const item = appData.foodLogs[idx];
+          appData.current.cal = Math.max(0, appData.current.cal - item.cal);
+          appData.current.pro = Math.max(0, appData.current.pro - item.pro);
+          appData.current.carb = Math.max(0, appData.current.carb - item.carb);
+          appData.current.fat = Math.max(0, appData.current.fat - item.fat);
+          appData.foodLogs.splice(idx, 1);
+          save();
+          initUI();
+        }
       }
     }
 
     function renderFoodLogs() {
       const container = document.getElementById('food-log');
-      container.innerHTML = appData.foodLogs.map(item => 
+      const activeLogs = (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex]) 
+        ? (appData.history[viewingHistoryIndex].logs || []) 
+        : appData.foodLogs;
+
+      if (activeLogs.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-muted); font-size:0.75rem; text-align:center; padding:10px;">No foods logged for this date.</div>';
+        return;
+      }
+
+      container.innerHTML = activeLogs.map(item => 
         `<div class="log-item" id="log-item-${item.id}">
           <span>${item.name} (${item.cal} kcal | ${item.pro}g P)</span>
           <span class="log-del" onclick="deleteFood(${item.id})">✕</span>
         </div>`
       ).join('');
 
-      // Attach Long-Press listener
-      appData.foodLogs.forEach(item => {
+      activeLogs.forEach(item => {
         const el = document.getElementById(`log-item-${item.id}`);
         if (el) attachLongPress(el, () => {
-          if (confirm(`Delete "${item.name}" from today's diet?`)) {
+          if (confirm(`Delete "${item.name}"?`)) {
             deleteFood(item.id);
           }
         });
@@ -545,17 +621,32 @@
 
     function updateNutritionUI() {
       const T = appData.targets;
-      document.getElementById('disp-cal').innerText = Math.round(appData.current.cal);
+      let curCal, curPro, curCarb, curFat;
+
+      if (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex]) {
+        const day = appData.history[viewingHistoryIndex];
+        curCal = day.cal || 0;
+        curPro = day.pro || 0;
+        curCarb = day.carb || 0;
+        curFat = day.fat || 0;
+      } else {
+        curCal = appData.current.cal;
+        curPro = appData.current.pro;
+        curCarb = appData.current.carb;
+        curFat = appData.current.fat;
+      }
+
+      document.getElementById('disp-cal').innerText = Math.round(curCal);
       document.getElementById('target-lbl-cal').innerText = `/ ${T.cal} kcal`;
-      document.getElementById('disp-pro').innerText = `${Math.round(appData.current.pro)}g`;
+      document.getElementById('disp-pro').innerText = `${Math.round(curPro)}g`;
       document.getElementById('target-lbl-pro').innerText = `/ ${T.pro}g Prot`;
-      document.getElementById('disp-carb').innerText = `${Math.round(appData.current.carb)}g`;
+      document.getElementById('disp-carb').innerText = `${Math.round(curCarb)}g`;
       document.getElementById('target-lbl-carb').innerText = `/ ${T.carb}g Carb`;
-      document.getElementById('disp-fat').innerText = `${Math.round(appData.current.fat)}g`;
+      document.getElementById('disp-fat').innerText = `${Math.round(curFat)}g`;
       document.getElementById('target-lbl-fat').innerText = `/ ${T.fat}g Fat`;
 
       // RED OVER-BUDGET LOGIC
-      const diff = T.cal - appData.current.cal;
+      const diff = T.cal - curCal;
       const calLeftEl = document.getElementById('cal-left');
       if (diff >= 0) {
         calLeftEl.innerText = `${Math.round(diff)} kcal left`;
@@ -565,8 +656,46 @@
         calLeftEl.style.color = 'var(--danger)';
       }
 
-      document.getElementById('cal-bar').style.width = Math.min(100, (appData.current.cal / T.cal) * 100) + '%';
+      document.getElementById('cal-bar').style.width = Math.min(100, (curCal / T.cal) * 100) + '%';
       document.getElementById('cal-bar').style.background = diff < 0 ? 'var(--danger)' : 'var(--accent)';
+    }
+
+    // SWITCH TO SPECIFIC DATE OR BACK TO TODAY
+    function switchToDate(index) {
+      viewingHistoryIndex = index;
+      closeModal('calendar-modal');
+      initUI();
+    }
+
+    function openCalendarModal() {
+      const list = document.getElementById('history-list');
+      let html = '';
+
+      // Today Card
+      const isTodayActive = viewingHistoryIndex === null;
+      html += `
+        <div class="log-item" onclick="switchToDate(null)" style="flex-direction:column; align-items:flex-start; gap:4px; cursor:pointer; border-left:3px solid var(--accent); background:${isTodayActive ? 'rgba(35,197,94,0.15)' : 'var(--card-inner)'}; margin-bottom:8px;">
+          <div style="font-weight:700; color:var(--accent);">⭐ Today (Current Day) ${isTodayActive ? '✓ [Active]' : ''}</div>
+          <div style="color:var(--text-muted); font-size:0.75rem;">${Math.round(appData.current.cal)} kcal | ${Math.round(appData.current.pro)}g Prot | ${appData.current.steps} steps</div>
+        </div>
+      `;
+
+      if (!appData.history || appData.history.length === 0) {
+        html += '<div style="color:var(--text-muted); font-size:0.8rem; text-align:center; padding:12px;">No past days archived yet.</div>';
+      } else {
+        html += appData.history.map((h, idx) => {
+          const isSelected = viewingHistoryIndex === idx;
+          return `
+            <div class="log-item" onclick="switchToDate(${idx})" style="flex-direction:column; align-items:flex-start; gap:4px; cursor:pointer; margin-bottom:6px; background:${isSelected ? 'rgba(79,140,255,0.15)' : 'var(--card-inner)'}; border-left:3px solid ${isSelected ? 'var(--warning)' : 'var(--primary)'};">
+              <div style="font-weight:700; color:${isSelected ? 'var(--warning)' : 'var(--primary)'};">${h.date} ${isSelected ? '✓ [Editing]' : '➔'}</div>
+              <div style="color:var(--text-muted); font-size:0.75rem;">${h.cal} kcal | ${h.pro}g Prot | ${h.steps || 0} steps | ${h.water || '0.00'}L H2O</div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      list.innerHTML = html;
+      openModal('calendar-modal');
     }
 
     // AUTO GOOGLE / WEB FETCH
@@ -627,7 +756,7 @@
     // MANAGE FOOD DATABASE (DELETE FOOD FROM LIST)
     function openFoodManagerModal() {
       const list = document.getElementById('db-food-list');
-      list.innerHTML = appData.foodsDb.map((item, idx) => `
+      list.innerHTML = appData.foodsDb.map((item) => `
         <div class="log-item" id="db-item-${item.id}">
           <span>${item.name} (${item.cal} kcal / ${item.per}${item.unit})</span>
           <span class="log-del" onclick="deleteDbFood('${item.id}')">✕</span>
@@ -653,34 +782,59 @@
 
     // STEPS & WATER
     function addWater(amount) {
-      appData.current.water = Math.min(6, appData.current.water + amount);
+      if (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex]) {
+        let cur = parseFloat(appData.history[viewingHistoryIndex].water) || 0;
+        appData.history[viewingHistoryIndex].water = Math.min(6, cur + amount).toFixed(2);
+      } else {
+        appData.current.water = Math.min(6, appData.current.water + amount);
+      }
       save();
       updateWaterUI();
     }
+
     function resetWater() {
       if (confirm("Reset water intake?")) {
-        appData.current.water = 0;
+        if (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex]) {
+          appData.history[viewingHistoryIndex].water = (0).toFixed(2);
+        } else {
+          appData.current.water = 0;
+        }
         save();
         updateWaterUI();
       }
     }
+
     function updateWaterUI() {
-      document.getElementById('water-val').innerText = `${appData.current.water.toFixed(2)} L`;
-      document.getElementById('water-bar').style.width = Math.min(100, (appData.current.water / appData.targets.water) * 100) + '%';
+      let cur = (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex])
+        ? parseFloat(appData.history[viewingHistoryIndex].water) || 0
+        : appData.current.water;
+
+      document.getElementById('water-val').innerText = `${Number(cur).toFixed(2)} L`;
+      document.getElementById('water-bar').style.width = Math.min(100, (cur / appData.targets.water) * 100) + '%';
     }
+
     function logSteps() {
       const steps = parseInt(document.getElementById('step-input').value) || 0;
       if (steps > 0) {
-        appData.current.steps += steps;
+        if (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex]) {
+          appData.history[viewingHistoryIndex].steps = (appData.history[viewingHistoryIndex].steps || 0) + steps;
+        } else {
+          appData.current.steps += steps;
+        }
         document.getElementById('step-input').value = '';
         save();
         updateStepsUI();
       }
     }
+
     function updateStepsUI() {
-      const km = (appData.current.steps * 0.75) / 1000;
-      const burned = appData.current.steps * 0.04;
-      document.getElementById('disp-steps').innerText = appData.current.steps;
+      let steps = (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex])
+        ? (appData.history[viewingHistoryIndex].steps || 0)
+        : appData.current.steps;
+
+      const km = (steps * 0.75) / 1000;
+      const burned = steps * 0.04;
+      document.getElementById('disp-steps').innerText = steps;
       document.getElementById('disp-km').innerText = km.toFixed(2) + ' km';
       document.getElementById('disp-step-cal').innerText = Math.round(burned) + ' kcal';
     }
@@ -751,27 +905,22 @@
       initUI();
     }
 
-    function openCalendarModal() {
-      const list = document.getElementById('history-list');
-      if (!appData.history || appData.history.length === 0) {
-        list.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem; text-align:center; padding:12px;">No archived history yet. Complete today to archive!</div>';
-      } else {
-        list.innerHTML = appData.history.map(h => `
-          <div class="log-item" style="flex-direction:column; align-items:flex-start; gap:4px;">
-            <div style="font-weight:700; color:var(--primary);">${h.date}</div>
-            <div style="color:var(--text-muted); font-size:0.75rem;">${h.cal} kcal | ${h.pro}g Prot | ${h.steps} steps | ${h.water}L H2O</div>
-          </div>
-        `).join('');
-      }
-      openModal('calendar-modal');
-    }
-
     // RESET BUTTON CONFIRMATION
     function resetDayManually() {
-      const confirmed = confirm("Are you sure you want to reset today's diet, water, and steps?");
+      const dateName = (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex]) 
+        ? appData.history[viewingHistoryIndex].date 
+        : "today's";
+
+      const confirmed = confirm(`Are you sure you want to reset ${dateName} diet, water, and steps?`);
       if (confirmed) {
-        appData.current = { cal: 0, pro: 0, carb: 0, fat: 0, water: 0.0, steps: 0 };
-        appData.foodLogs = [];
+        if (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex]) {
+          const day = appData.history[viewingHistoryIndex];
+          day.cal = 0; day.pro = 0; day.carb = 0; day.fat = 0; day.water = (0).toFixed(2); day.steps = 0;
+          day.logs = [];
+        } else {
+          appData.current = { cal: 0, pro: 0, carb: 0, fat: 0, water: 0.0, steps: 0 };
+          appData.foodLogs = [];
+        }
         save();
         initUI();
       }
