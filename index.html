@@ -55,8 +55,18 @@
       position: sticky; top: 0; z-index: 90;
       display: flex; justify-content: space-between; align-items: center;
     }
-    .brand-title { font-size: 0.95rem; font-weight: 800; color: var(--primary); }
-    .header-actions { display: flex; gap: 6px; }
+    .brand-title { 
+      font-size: 0.95rem; font-weight: 800; color: var(--primary); 
+      cursor: pointer; display: flex; align-items: center; gap: 8px;
+    }
+    .brand-logo-badge {
+      background: rgba(79, 140, 255, 0.15); border: 1px solid var(--primary);
+      color: #fff; border-radius: 50%; width: 28px; height: 28px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 0.8rem; cursor: pointer; transition: transform 0.2s;
+    }
+    .brand-logo-badge:active { transform: scale(0.9); }
+    .header-actions { display: flex; gap: 6px; align-items: center; }
 
     /* Past Date Active Banner */
     #active-date-banner {
@@ -124,6 +134,14 @@
     }
     .log-del { color: var(--danger); cursor: pointer; margin-left: 10px; font-weight: bold; font-size: 1rem; }
 
+    /* Search bar styling */
+    #food-search-bar {
+      margin-bottom: 8px;
+      background: #0d121c;
+      border: 1px solid var(--border);
+      font-size: 0.82rem;
+    }
+
     /* Excel Table Styling */
     .excel-container {
       overflow-x: auto; border: 1px solid #1e3a2b; border-radius: 8px; background: #0c120f;
@@ -167,8 +185,9 @@
   </div>
 
   <header>
-    <div>
-      <div class="brand-title">@FT.DRG TRACKER</div>
+    <div class="brand-title" onclick="openAuthModal()" title="Tap to login or sync cloud data">
+      <span class="brand-logo-badge" id="header-avatar-badge">⚡</span>
+      <span id="header-title-text">@FT.DRG TRACKER</span>
     </div>
     <div class="header-actions">
       <button class="btn-secondary btn-small" onclick="openCalendarModal()">📅 Days</button>
@@ -227,6 +246,15 @@
             <button class="btn-secondary btn-small" onclick="openAddFoodModal()">+ Create Food</button>
           </div>
         </div>
+        
+        <!-- SEARCH BAR (Auto Filters Dropdown) -->
+        <input 
+          type="text" 
+          id="food-search-bar" 
+          placeholder="🔍 Search food (e.g. egg, paneer, milk)..." 
+          oninput="filterFoodList(this.value)"
+        >
+
         <div style="display: flex; gap: 8px;">
           <select id="food-select" style="flex: 2;"></select>
           <input type="number" id="portion-input" placeholder="Grams / Qty" style="flex: 1;">
@@ -394,8 +422,53 @@
     </div>
   </div>
 
+  <!-- MODAL: AUTHENTICATION & CLOUD SYNC -->
+  <div class="modal" id="authModal">
+    <div class="modal-content" style="max-width:350px; text-align:center;">
+      <h2 id="authModalTitle" style="margin-bottom: 16px; font-size: 1.05rem;">Account & Cloud Sync</h2>
+      
+      <div id="authInputGroup">
+        <input type="email" id="authEmail" placeholder="Enter your email" style="margin-bottom: 10px;">
+        <input type="password" id="authPass" placeholder="Password (min 6 characters)" style="margin-bottom: 16px;">
+      </div>
+
+      <div id="authActions">
+        <button onclick="submitAuth('login')" style="background: var(--accent); margin-bottom: 8px;">Login</button>
+        <button class="btn-secondary" onclick="submitAuth('signup')" style="margin-bottom: 8px;">Create New Account</button>
+      </div>
+
+      <div id="authLoggedInActions" style="display:none;">
+        <p id="loggedInUserText" style="margin-bottom: 14px; font-size: 0.8rem; color: var(--text-muted); word-break: break-all;"></p>
+        <button onclick="syncDataToCloud(true)" style="background: var(--primary); margin-bottom: 8px;">🔄 Sync All Data Now</button>
+        <button onclick="handleSignOut()" style="background: var(--danger); margin-bottom: 8px;">Log Out</button>
+      </div>
+
+      <button class="btn-secondary" onclick="closeModal('authModal')" style="margin-top: 6px;">Close</button>
+    </div>
+  </div>
+
+  <!-- FIREBASE SCRIPTS (COMPAT) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
   <script>
-    // DUAL RAW & COOKED MASTER DATABASE
+    // --- FIREBASE CONFIGURATION ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyBdDnMIK5tRRu2r8my_NlyUp7XPXBA-HJw",
+      authDomain: "nutrio-tracker.firebaseapp.com",
+      projectId: "nutrio-tracker",
+      storageBucket: "nutrio-tracker.firebasestorage.app",
+      messagingSenderId: "794188784850",
+      appId: "1:794188784850:web:022901efd88845bf51390b"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    let currentUser = null;
+
+    // Dual Raw & Cooked Master Database
     const DEFAULT_FOODS = [
       { id: "toned_milk", name: "Toned Milk", unit: "ml", cal: 58, pro: 3.2, carb: 4.8, fat: 3.0, per: 100 },
       { id: "soya_raw", name: "Soya Chunks (Raw)", unit: "g", cal: 345, pro: 52.0, carb: 33.0, fat: 0.5, per: 100 },
@@ -439,11 +512,13 @@
       appData.foodsDb = DEFAULT_FOODS;
     }
 
-    // null means viewing & editing TODAY (active day). Number means index in appData.history
     let viewingHistoryIndex = null;
 
     function save() {
       localStorage.setItem('ftdrgCutData_v2', JSON.stringify(appData));
+      if (currentUser) {
+        syncDataToCloud(false);
+      }
     }
 
     function checkDailyRollover() {
@@ -508,6 +583,30 @@
       select.innerHTML = appData.foodsDb.map(f => `<option value="${f.id}">${f.name} (${f.unit})</option>`).join('');
     }
 
+    // SEARCH BAR LOGIC
+    function filterFoodList(query) {
+      const term = query.toLowerCase().trim();
+      const select = document.getElementById('food-select');
+      if (!select) return;
+
+      const options = select.querySelectorAll('option');
+      let firstMatch = false;
+
+      options.forEach(opt => {
+        const text = opt.textContent.toLowerCase();
+        if (text.includes(term)) {
+          opt.style.display = '';
+          if (!firstMatch && term !== '') {
+            opt.selected = true;
+            select.value = opt.value;
+            firstMatch = true;
+          }
+        } else {
+          opt.style.display = 'none';
+        }
+      });
+    }
+
     function addFoodPortion() {
       const selId = document.getElementById('food-select').value;
       const qty = parseFloat(document.getElementById('portion-input').value) || 0;
@@ -527,7 +626,6 @@
       };
 
       if (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex]) {
-        // Adding into past date history
         const day = appData.history[viewingHistoryIndex];
         if (!day.logs) day.logs = [];
         day.logs.unshift(log);
@@ -536,7 +634,6 @@
         day.carb = Math.round(((day.carb || 0) + log.carb) * 10) / 10;
         day.fat = Math.round(((day.fat || 0) + log.fat) * 10) / 10;
       } else {
-        // Adding into current today
         appData.current.cal += log.cal;
         appData.current.pro += log.pro;
         appData.current.carb += log.carb;
@@ -606,7 +703,6 @@
       });
     }
 
-    // Long Press Utility
     function attachLongPress(el, callback) {
       let timer;
       const start = () => { timer = setTimeout(callback, 500); };
@@ -645,7 +741,6 @@
       document.getElementById('disp-fat').innerText = `${Math.round(curFat)}g`;
       document.getElementById('target-lbl-fat').innerText = `/ ${T.fat}g Fat`;
 
-      // RED OVER-BUDGET LOGIC
       const diff = T.cal - curCal;
       const calLeftEl = document.getElementById('cal-left');
       if (diff >= 0) {
@@ -660,7 +755,6 @@
       document.getElementById('cal-bar').style.background = diff < 0 ? 'var(--danger)' : 'var(--accent)';
     }
 
-    // SWITCH TO SPECIFIC DATE OR BACK TO TODAY
     function switchToDate(index) {
       viewingHistoryIndex = index;
       closeModal('calendar-modal');
@@ -671,7 +765,6 @@
       const list = document.getElementById('history-list');
       let html = '';
 
-      // Today Card
       const isTodayActive = viewingHistoryIndex === null;
       html += `
         <div class="log-item" onclick="switchToDate(null)" style="flex-direction:column; align-items:flex-start; gap:4px; cursor:pointer; border-left:3px solid var(--accent); background:${isTodayActive ? 'rgba(35,197,94,0.15)' : 'var(--card-inner)'}; margin-bottom:8px;">
@@ -698,7 +791,6 @@
       openModal('calendar-modal');
     }
 
-    // AUTO GOOGLE / WEB FETCH
     async function autoSearchFood() {
       const query = document.getElementById('auto-food-query').value.trim();
       const statusEl = document.getElementById('auto-search-status');
@@ -721,7 +813,7 @@
           
           statusEl.innerText = "✓ Found! Check below and click Save.";
         } else {
-          statusEl.innerText = "Online nahi mila, niche manually fill karke save karein.";
+          statusEl.innerText = "Online nahi mila, niche manually fill kayein.";
         }
       } catch (err) {
         statusEl.innerText = "Search error. Please fill values manually.";
@@ -753,7 +845,6 @@
       document.getElementById('auto-search-status').innerText = '';
     }
 
-    // MANAGE FOOD DATABASE (DELETE FOOD FROM LIST)
     function openFoodManagerModal() {
       const list = document.getElementById('db-food-list');
       list.innerHTML = appData.foodsDb.map((item) => `
@@ -780,7 +871,6 @@
       }
     }
 
-    // STEPS & WATER
     function addWater(amount) {
       if (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex]) {
         let cur = parseFloat(appData.history[viewingHistoryIndex].water) || 0;
@@ -839,7 +929,6 @@
       document.getElementById('disp-step-cal').innerText = Math.round(burned) + ' kcal';
     }
 
-    // EXCEL WORKOUT GRID
     function renderExerciseTable() {
       const tbody = document.getElementById('exercise-table-body');
       tbody.innerHTML = appData.exercises.map((ex, i) => {
@@ -884,7 +973,7 @@
       }
     }
 
-    // MODALS & TARGETS
+    // MODAL HELPERS
     function openModal(id) { document.getElementById(id).style.display = 'flex'; }
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
     function openAddFoodModal() { openModal('add-food-modal'); }
@@ -905,7 +994,6 @@
       initUI();
     }
 
-    // RESET BUTTON CONFIRMATION
     function resetDayManually() {
       const dateName = (viewingHistoryIndex !== null && appData.history[viewingHistoryIndex]) 
         ? appData.history[viewingHistoryIndex].date 
@@ -926,186 +1014,114 @@
       }
     }
 
-    window.onload = initUI;
-  </script>
-  <!-- ================= FIREBASE SYNC & AUTH SETUP (UPDATED) ================= -->
-
-<!-- Clean Dark Theme Auth Popup Modal -->
-<div id="authModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;">
-  <div style="background:#161b22;padding:24px;border-radius:16px;width:100%;max-width:350px;color:#fff;border:1px solid #30363d;box-shadow:0 10px 30px rgba(0,0,0,0.5);text-align:center;">
-    <h3 id="authModalTitle" style="margin:0 0 16px 0;font-size:20px;font-weight:700;">Account & Cloud Sync</h3>
-    
-    <!-- Inputs for Login / Signup -->
-    <div id="authInputGroup">
-      <input type="email" id="authEmail" placeholder="Enter your email" style="width:100%;padding:12px;margin-bottom:12px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#fff;font-size:14px;outline:none;box-sizing:border-box;">
-      <input type="password" id="authPass" placeholder="Password (min 6 characters)" style="width:100%;padding:12px;margin-bottom:16px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#fff;font-size:14px;outline:none;box-sizing:border-box;">
-    </div>
-    
-    <!-- Actions when Logged Out -->
-    <div id="authActions">
-      <button onclick="submitAuth('login')" style="width:100%;padding:12px;background:#22c55e;color:#0d1117;border:none;border-radius:8px;font-weight:700;font-size:15px;margin-bottom:10px;cursor:pointer;">Login</button>
-      <button onclick="submitAuth('signup')" style="width:100%;padding:12px;background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:8px;font-weight:600;font-size:14px;margin-bottom:10px;cursor:pointer;">Create New Account</button>
-    </div>
-    
-    <!-- Actions when Logged In -->
-    <div id="authLoggedInActions" style="display:none;">
-      <p id="loggedInUserText" style="margin:0 0 14px 0;font-size:14px;color:#8b949e;word-break:break-all;"></p>
-      <button onclick="syncDataToCloud(true)" style="width:100%;padding:12px;background:#38bdf8;color:#0d1117;border:none;border-radius:8px;font-weight:700;font-size:15px;margin-bottom:10px;cursor:pointer;">🔄 Sync All Data Now</button>
-      <button onclick="handleSignOut()" style="width:100%;padding:12px;background:#ef4444;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:14px;margin-bottom:10px;cursor:pointer;">Log Out</button>
-    </div>
-    
-    <button onclick="closeAuthModal()" style="background:transparent;border:none;color:#8b949e;font-size:13px;cursor:pointer;margin-top:6px;text-decoration:underline;">Close</button>
-  </div>
-</div>
-
-<!-- Firebase SDKs & Integration Script -->
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-
-<script>
-  const firebaseConfig = {
-    apiKey: "AIzaSyBdDnMIK5tRRu2r8my_NlyUp7XPXBA-HJw",
-    authDomain: "nutrio-tracker.firebaseapp.com",
-    projectId: "nutrio-tracker",
-    storageBucket: "nutrio-tracker.firebasestorage.app",
-    messagingSenderId: "794188784850",
-    appId: "1:794188784850:web:022901efd88845bf51390b"
-  };
-
-  firebase.initializeApp(firebaseConfig);
-  const auth = firebase.auth();
-  const db = firebase.firestore();
-  let currentUser = null;
-
-  // Header ke logo icon par click event automatically link karna
-  function attachLogoListener() {
-    // Top right logo icon ko find karna (img tag ya header avatar)
-    const candidates = document.querySelectorAll('img, .avatar, .profile-icon, header img');
-    candidates.forEach(el => {
-      if (el.src && (el.src.includes('avatar') || el.src.includes('logo') || el.offsetWidth <= 60)) {
-        el.style.cursor = 'pointer';
-        el.onclick = () => openAuthModal();
-      }
-    });
-    // Fallback: agar specific class/id na ho toh sabse pehle image par listener bind ho jayega
-    const topImages = document.querySelectorAll('img');
-    if (topImages.length > 0) {
-      topImages[topImages.length - 1].style.cursor = 'pointer';
-      topImages[topImages.length - 1].onclick = () => openAuthModal();
-    }
-  }
-
-  // Auth state listener
-  auth.onAuthStateChanged(async (user) => {
-    if (user) {
-      currentUser = user;
-      await restoreDataFromCloud(user.uid);
-    } else {
-      currentUser = null;
-    }
-  });
-
-  function openAuthModal() {
-    const modal = document.getElementById('authModal');
-    modal.style.display = 'flex';
-    if (currentUser) {
-      document.getElementById('authModalTitle').innerText = "Account & Cloud Sync";
-      document.getElementById('authInputGroup').style.display = 'none';
-      document.getElementById('authActions').style.display = 'none';
-      document.getElementById('authLoggedInActions').style.display = 'block';
-      document.getElementById('loggedInUserText').innerText = "Logged in as: " + currentUser.email;
-    } else {
-      document.getElementById('authModalTitle').innerText = "Sign In / Sync Data";
-      document.getElementById('authInputGroup').style.display = 'block';
-      document.getElementById('authActions').style.display = 'block';
-      document.getElementById('authLoggedInActions').style.display = 'none';
-    }
-  }
-
-  function closeAuthModal() {
-    document.getElementById('authModal').style.display = 'none';
-  }
-
-  async function submitAuth(type) {
-    const email = document.getElementById('authEmail').value.trim();
-    const pass = document.getElementById('authPass').value.trim();
-    if (!email || !pass) return alert("Email aur password dono fill karo!");
-
-    try {
-      if (type === 'signup') {
-        await auth.createUserWithEmailAndPassword(email, pass);
-        await syncDataToCloud(false);
-        alert("Account ban gaya aur cloud sync ON ho gaya!");
+    // --- FIREBASE AUTH & REALTIME CLOUD SYNC ---
+    auth.onAuthStateChanged(async (user) => {
+      const avatar = document.getElementById('header-avatar-badge');
+      if (user) {
+        currentUser = user;
+        if (avatar) {
+          avatar.innerText = "✓";
+          avatar.style.borderColor = "var(--accent)";
+          avatar.style.background = "rgba(35, 197, 94, 0.2)";
+        }
+        await restoreDataFromCloud(user.uid);
       } else {
-        await auth.signInWithEmailAndPassword(email, pass);
-        alert("Login successful! Data restore ho gaya.");
-        location.reload();
-      }
-      closeAuthModal();
-    } catch (err) {
-      alert("Error: " + err.message);
-    }
-  }
-
-  async function syncDataToCloud(showAlert = false) {
-    if (!currentUser) return;
-    try {
-      const allData = {};
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        allData[key] = localStorage.getItem(key);
-      }
-      await db.collection("users").doc(currentUser.uid).set({
-        storage: allData,
-        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-      if (showAlert) alert("Data cloud par sync ho gaya!");
-    } catch (err) {
-      console.error("Sync error:", err);
-      if (showAlert) alert("Sync failed: " + err.message);
-    }
-  }
-
-  async function restoreDataFromCloud(uid) {
-    try {
-      const doc = await db.collection("users").doc(uid).get();
-      if (doc.exists && doc.data().storage) {
-        const cloudData = doc.data().storage;
-        let restored = false;
-        Object.keys(cloudData).forEach(key => {
-          if (cloudData[key] !== null) {
-            localStorage.setItem(key, cloudData[key]);
-            restored = true;
-          }
-        });
-        if (restored && !sessionStorage.getItem('synced_once')) {
-          sessionStorage.setItem('synced_once', 'true');
-          location.reload();
+        currentUser = null;
+        if (avatar) {
+          avatar.innerText = "⚡";
+          avatar.style.borderColor = "var(--primary)";
+          avatar.style.background = "rgba(79, 140, 255, 0.15)";
         }
       }
-    } catch (err) {
-      console.error("Restore error:", err);
-    }
-  }
-
-  function handleSignOut() {
-    auth.signOut().then(() => {
-      sessionStorage.removeItem('synced_once');
-      alert("Logged out!");
-      location.reload();
     });
-  }
 
-  // Page load hote hi listener lagana
-  window.addEventListener('DOMContentLoaded', attachLogoListener);
-  setTimeout(attachLogoListener, 1000);
+    function openAuthModal() {
+      const modal = document.getElementById('authModal');
+      modal.style.display = 'flex';
+      if (currentUser) {
+        document.getElementById('authModalTitle').innerText = "Account & Cloud Sync";
+        document.getElementById('authInputGroup').style.display = 'none';
+        document.getElementById('authActions').style.display = 'none';
+        document.getElementById('authLoggedInActions').style.display = 'block';
+        document.getElementById('loggedInUserText').innerText = "Logged in: " + currentUser.email;
+      } else {
+        document.getElementById('authModalTitle').innerText = "Sign In / Sync Data";
+        document.getElementById('authInputGroup').style.display = 'block';
+        document.getElementById('authActions').style.display = 'block';
+        document.getElementById('authLoggedInActions').style.display = 'none';
+      }
+    }
 
-  window.addEventListener('beforeunload', () => {
-    if (currentUser) syncDataToCloud(false);
-  });
-</script>
-<!-- ================= FIREBASE SYNC & AUTH SETUP (END) ================= -->
+    async function submitAuth(type) {
+      const email = document.getElementById('authEmail').value.trim();
+      const pass = document.getElementById('authPass').value.trim();
+      if (!email || !pass) return alert("Email aur password dono fill karein!");
 
+      try {
+        if (type === 'signup') {
+          await auth.createUserWithEmailAndPassword(email, pass);
+          await syncDataToCloud(false);
+          alert("Account created and data synced to cloud!");
+        } else {
+          await auth.signInWithEmailAndPassword(email, pass);
+          alert("Login successful! Cloud data restore ho gaya.");
+          location.reload();
+        }
+        closeModal('authModal');
+      } catch (err) {
+        alert("Auth Error: " + err.message);
+      }
+    }
+
+    async function syncDataToCloud(showAlert = false) {
+      if (!currentUser) return;
+      try {
+        const allData = {};
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          allData[key] = localStorage.getItem(key);
+        }
+        await db.collection("users").doc(currentUser.uid).set({
+          storage: allData,
+          lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        if (showAlert) alert("Data cloud par sync ho gaya!");
+      } catch (err) {
+        if (showAlert) alert("Sync failed: " + err.message);
+      }
+    }
+
+    async function restoreDataFromCloud(uid) {
+      try {
+        const doc = await db.collection("users").doc(uid).get();
+        if (doc.exists && doc.data().storage) {
+          const cloudData = doc.data().storage;
+          let restored = false;
+          Object.keys(cloudData).forEach(key => {
+            if (cloudData[key] !== null) {
+              localStorage.setItem(key, cloudData[key]);
+              restored = true;
+            }
+          });
+          if (restored && !sessionStorage.getItem('synced_once')) {
+            sessionStorage.setItem('synced_once', 'true');
+            location.reload();
+          }
+        }
+      } catch (err) {
+        console.error("Cloud restore error:", err);
+      }
+    }
+
+    function handleSignOut() {
+      auth.signOut().then(() => {
+        sessionStorage.removeItem('synced_once');
+        alert("Logged out successfully!");
+        location.reload();
+      });
+    }
+
+    window.onload = initUI;
+  </script>
 </body>
 </html>
