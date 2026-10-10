@@ -55,18 +55,14 @@
       position: sticky; top: 0; z-index: 90;
       display: flex; justify-content: space-between; align-items: center;
     }
-    .brand-title { 
-      font-size: 0.95rem; font-weight: 800; color: var(--primary); 
-      cursor: pointer; display: flex; align-items: center; gap: 8px;
+    .brand-title { font-size: 0.95rem; font-weight: 800; color: var(--primary); }
+    .header-actions { display: flex; gap: 8px; align-items: center; }
+
+    .header-logo-img {
+      width: 34px; height: 34px; border-radius: 8px; object-fit: cover;
+      cursor: pointer; user-select: none; -webkit-user-select: none;
+      border: 1px solid var(--border);
     }
-    .brand-logo-badge {
-      background: rgba(79, 140, 255, 0.15); border: 1px solid var(--primary);
-      color: #fff; border-radius: 50%; width: 28px; height: 28px;
-      display: inline-flex; align-items: center; justify-content: center;
-      font-size: 0.8rem; cursor: pointer; transition: transform 0.2s;
-    }
-    .brand-logo-badge:active { transform: scale(0.9); }
-    .header-actions { display: flex; gap: 6px; align-items: center; }
 
     /* Past Date Active Banner */
     #active-date-banner {
@@ -185,11 +181,12 @@
   </div>
 
   <header>
-    <div class="brand-title" onclick="openAuthModal()" title="Tap to login or sync cloud data">
-      <span class="brand-logo-badge" id="header-avatar-badge">⚡</span>
-      <span id="header-title-text">@FT.DRG TRACKER</span>
+    <div>
+      <div class="brand-title">@FT.DRG TRACKER</div>
     </div>
     <div class="header-actions">
+      <!-- Right corner Logo/Image (Long-press triggers Auth Modal) -->
+      <img src="icon-192.png" id="top-right-logo" class="header-logo-img" alt="Logo" onerror="this.style.display='none'">
       <button class="btn-secondary btn-small" onclick="openCalendarModal()">📅 Days</button>
       <button class="btn-secondary btn-small" onclick="openTargetModal()">⚙️ Targets</button>
       <button class="btn-danger" onclick="resetDayManually()">Reset</button>
@@ -558,6 +555,17 @@
       renderExerciseTable();
       renderFoodLogs();
       updateBannerUI();
+      setupLogoLongPress();
+    }
+
+    // LONG PRESS ON TOP RIGHT LOGO FOR AUTH MODAL
+    function setupLogoLongPress() {
+      const logos = document.querySelectorAll('header img, .header-actions img, #top-right-logo');
+      logos.forEach(logo => {
+        attachLongPress(logo, () => {
+          openAuthModal();
+        });
+      });
     }
 
     function updateBannerUI() {
@@ -1016,22 +1024,11 @@
 
     // --- FIREBASE AUTH & REALTIME CLOUD SYNC ---
     auth.onAuthStateChanged(async (user) => {
-      const avatar = document.getElementById('header-avatar-badge');
       if (user) {
         currentUser = user;
-        if (avatar) {
-          avatar.innerText = "✓";
-          avatar.style.borderColor = "var(--accent)";
-          avatar.style.background = "rgba(35, 197, 94, 0.2)";
-        }
         await restoreDataFromCloud(user.uid);
       } else {
         currentUser = null;
-        if (avatar) {
-          avatar.innerText = "⚡";
-          avatar.style.borderColor = "var(--primary)";
-          avatar.style.background = "rgba(79, 140, 255, 0.15)";
-        }
       }
     });
 
