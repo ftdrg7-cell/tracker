@@ -928,19 +928,12 @@
 
     window.onload = initUI;
   </script>
-  <!-- ================= FIREBASE SYNC & AUTH SETUP (START) ================= -->
+  <!-- ================= FIREBASE SYNC & AUTH SETUP (UPDATED) ================= -->
 
-<!-- 1. Floating Account / Sync Button -->
-<div id="auth-floating-container" style="position:fixed;bottom:20px;right:20px;z-index:999;">
-  <button id="auth-modal-btn" onclick="openAuthModal()" style="background:#22c55e;color:#0d1117;border:none;padding:10px 18px;border-radius:30px;font-weight:700;font-size:14px;box-shadow:0 4px 15px rgba(34,197,94,0.3);cursor:pointer;display:flex;align-items:center;gap:6px;">
-    <span>☁️</span> <span id="authBtnLabel">Sign In / Sync</span>
-  </button>
-</div>
-
-<!-- 2. Clean Dark Theme Auth Popup Modal -->
+<!-- Clean Dark Theme Auth Popup Modal -->
 <div id="authModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;">
   <div style="background:#161b22;padding:24px;border-radius:16px;width:100%;max-width:350px;color:#fff;border:1px solid #30363d;box-shadow:0 10px 30px rgba(0,0,0,0.5);text-align:center;">
-    <h3 id="authModalTitle" style="margin:0 0 16px 0;font-size:20px;font-weight:700;">Sign In / Sync Data</h3>
+    <h3 id="authModalTitle" style="margin:0 0 16px 0;font-size:20px;font-weight:700;">Account & Cloud Sync</h3>
     
     <!-- Inputs for Login / Signup -->
     <div id="authInputGroup">
@@ -965,13 +958,12 @@
   </div>
 </div>
 
-<!-- 3. Firebase SDKs & Integration Script -->
+<!-- Firebase SDKs & Integration Script -->
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
 <script>
-  // Firebase configuration
   const firebaseConfig = {
     apiKey: "AIzaSyBdDnMIK5tRRu2r8my_NlyUp7XPXBA-HJw",
     authDomain: "nutrio-tracker.firebaseapp.com",
@@ -986,17 +978,31 @@
   const db = firebase.firestore();
   let currentUser = null;
 
-  // Track Auth state & auto-restore data
+  // Header ke logo icon par click event automatically link karna
+  function attachLogoListener() {
+    // Top right logo icon ko find karna (img tag ya header avatar)
+    const candidates = document.querySelectorAll('img, .avatar, .profile-icon, header img');
+    candidates.forEach(el => {
+      if (el.src && (el.src.includes('avatar') || el.src.includes('logo') || el.offsetWidth <= 60)) {
+        el.style.cursor = 'pointer';
+        el.onclick = () => openAuthModal();
+      }
+    });
+    // Fallback: agar specific class/id na ho toh sabse pehle image par listener bind ho jayega
+    const topImages = document.querySelectorAll('img');
+    if (topImages.length > 0) {
+      topImages[topImages.length - 1].style.cursor = 'pointer';
+      topImages[topImages.length - 1].onclick = () => openAuthModal();
+    }
+  }
+
+  // Auth state listener
   auth.onAuthStateChanged(async (user) => {
-    const btnLabel = document.getElementById('authBtnLabel');
     if (user) {
       currentUser = user;
-      const username = user.email.split('@')[0];
-      if (btnLabel) btnLabel.innerText = "Synced (" + username + ")";
       await restoreDataFromCloud(user.uid);
     } else {
       currentUser = null;
-      if (btnLabel) btnLabel.innerText = "Sign In / Sync";
     }
   });
 
@@ -1024,16 +1030,16 @@
   async function submitAuth(type) {
     const email = document.getElementById('authEmail').value.trim();
     const pass = document.getElementById('authPass').value.trim();
-    if (!email || !pass) return alert("Bhai email aur password dono likho!");
+    if (!email || !pass) return alert("Email aur password dono fill karo!");
 
     try {
       if (type === 'signup') {
         await auth.createUserWithEmailAndPassword(email, pass);
         await syncDataToCloud(false);
-        alert("Account ban gaya aur data cloud pe save ho gaya!");
+        alert("Account ban gaya aur cloud sync ON ho gaya!");
       } else {
         await auth.signInWithEmailAndPassword(email, pass);
-        alert("Login successful! Purana data cloud se load ho raha hai...");
+        alert("Login successful! Data restore ho gaya.");
         location.reload();
       }
       closeAuthModal();
@@ -1042,7 +1048,6 @@
     }
   }
 
-  // Backup all localStorage data to Firestore
   async function syncDataToCloud(showAlert = false) {
     if (!currentUser) return;
     try {
@@ -1055,14 +1060,13 @@
         storage: allData,
         lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
       }, { merge: true });
-      if (showAlert) alert("Saara data cloud par update ho gaya hai!");
+      if (showAlert) alert("Data cloud par sync ho gaya!");
     } catch (err) {
       console.error("Sync error:", err);
       if (showAlert) alert("Sync failed: " + err.message);
     }
   }
 
-  // Restore cloud data into localStorage
   async function restoreDataFromCloud(uid) {
     try {
       const doc = await db.collection("users").doc(uid).get();
@@ -1093,7 +1097,10 @@
     });
   }
 
-  // Auto sync on changes
+  // Page load hote hi listener lagana
+  window.addEventListener('DOMContentLoaded', attachLogoListener);
+  setTimeout(attachLogoListener, 1000);
+
   window.addEventListener('beforeunload', () => {
     if (currentUser) syncDataToCloud(false);
   });
